@@ -13,8 +13,7 @@ def float_ou_none(valor):
 		# Remove pontos e substitui vírgula por ponto
 		if isinstance(valor, str):
 			valor = valor.replace(".", "").replace(",", ".")
-		valor = float(valor)*10**12
-		return valor
+		return float(valor)
 	except (TypeError, ValueError):
 		return valor
 
@@ -101,7 +100,7 @@ def historico_para_csv(nome_csv, historico):
 	"""Salva o histórico em um arquivo CSV com formato data(AAAA-MM-DD),valor."""
 	# Ordena cronologicamente por ano, mês e dia
 	historico_ordenado = sorted(historico, key=lambda x: (x['ano'], x['mês'], x['dia']))
-	
+
 	with open(nome_csv, 'w', newline='', encoding='latin-1') as arq:
 		writer = csv.DictWriter(arq, fieldnames=["data", "valor"])
 		writer.writeheader()
@@ -109,6 +108,16 @@ def historico_para_csv(nome_csv, historico):
 			# Formata a data como AAAA-MM-DD
 			data = f"{int(registro['ano'])}-{int(registro['mês']):02d}-{int(registro['dia']):02d}"
 			writer.writerow({"data": data, "valor": registro['valor']})
+
+def multiplicar_historico(historico, fator=10**12):
+	"""Retorna uma cópia do histórico com os valores numéricos multiplicados pelo fator."""
+	resultado = []
+	for registro in historico:
+		novo = dict(registro)
+		if isinstance(novo['valor'], float):
+			novo['valor'] = novo['valor'] * fator
+		resultado.append(novo)
+	return resultado
 
 if __name__ == "__main__":
 	arquivo = "IBOVDIA.XLS"
@@ -118,7 +127,10 @@ if __name__ == "__main__":
 		nome = f"Evolucao_Diaria ({i}).csv"
 		adicionar_historico_ibovespa_csv(nome, historico_ibovespa)
 
-	historico_para_csv("Historico_IBovespa_Revertido.csv", historico_ibovespa)
+	historico_para_csv("Historico_IBovespa.csv", historico_ibovespa)
+
+	historico_mult = multiplicar_historico(historico_ibovespa)
+	historico_para_csv("Historico_IBovespa_Revertido.csv", historico_mult)
 
 	print(f"Total de registros: {len(historico_ibovespa)}")
 	print(f"Primeiros 5 registros:")

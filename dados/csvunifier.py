@@ -120,17 +120,18 @@ def multiplicar_historico(historico, fator=10**12):
 	return resultado
 
 if __name__ == "__main__":
-	arquivo = "IBOVDIA.XLS"
+	pasta = Path(__file__).parent
+	arquivo = pasta / "IBOVDIA.XLS"
 	historico_ibovespa = extrair_historico_ibovespa_xls(arquivo)
-	adicionar_historico_ibovespa_csv("Evolucao_Diaria.csv", historico_ibovespa)
+	adicionar_historico_ibovespa_csv(pasta / "Evolucao_Diaria.csv", historico_ibovespa)
 	for i in range(1, 29):
-		nome = f"Evolucao_Diaria ({i}).csv"
+		nome = pasta / f"Evolucao_Diaria ({i}).csv"
 		adicionar_historico_ibovespa_csv(nome, historico_ibovespa)
 
-	historico_para_csv("Historico_IBovespa.csv", historico_ibovespa)
+	historico_para_csv(pasta / "Historico_IBovespa.csv", historico_ibovespa)
 
 	historico_mult = multiplicar_historico(historico_ibovespa)
-	historico_para_csv("Historico_IBovespa_Revertido.csv", historico_mult)
+	historico_para_csv(pasta / "Historico_IBovespa_Revertido.csv", historico_mult)
 
 	print(f"Total de registros: {len(historico_ibovespa)}")
 	print(f"Primeiros 5 registros:")

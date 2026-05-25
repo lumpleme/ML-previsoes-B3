@@ -1,7 +1,7 @@
 from pathlib import Path
 import xlrd
 import csv
-from datetime import datetime
+from datetime import date
 
 
 
@@ -47,6 +47,10 @@ def extrair_historico_ibovespa_xls(caminho_xls):
 			# Colunas B..M no Excel => indices 1..12.
 			for col in range(1, 13):
 				mes = int(col)  # B=1, C=2, ..., M=12
+				try:
+					date(ano, mes, dia)
+				except ValueError:
+					continue
 				valor = float_ou_none(aba.cell_value(l, col))
 
 				dados.append(
@@ -87,6 +91,10 @@ def adicionar_historico_ibovespa_csv(nome_csv, historico):
 			# Processa cada mês (Jan=1, Fev=2, ..., Dez=12)
 			for mes_idx in range(1, 13):
 				if mes_idx < len(valores):
+					try:
+						date(ano, mes_idx, dia)
+					except ValueError:
+						continue
 					valor = float_ou_none(valores[mes_idx])
 					
 					historico.append({

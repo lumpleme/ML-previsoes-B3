@@ -9,7 +9,7 @@ from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
 import random
-
+from sklearn.svm import SVR
 
 
 class ModeloLSTM(nn.Module):
@@ -124,7 +124,8 @@ grid_params = {
     'max_epochs': [50]
 }
 
-tscv = TimeSeriesSplit(n_splits=3)
+# tscv = TimeSeriesSplit(n_splits=3)
+tscv = TimeSeriesSplit(n_splits=2)
 
 gs = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_squared_error', verbose=2)
 gs.fit(x_treino, y_treino)
@@ -136,21 +137,54 @@ print("Melhor MSE:", gs.best_score_)
 
 y_teste_previsto = gs.predict(x_teste)
 
+# métricas do LSTM
 rmse = np.sqrt(mean_squared_error(y_teste, y_teste_previsto))
 mape = mean_absolute_percentage_error(y_teste, y_teste_previsto)
 
-print("RESULTADOS FINAIS (TESTE)")
+print("RESULTADOS FINAIS LSTM (TESTE)")
 print(f"RMSE : {rmse:.4f}")
 print(f"MAPE : {mape:.4f}")
 
+# ========================================================= #
+# Teste de regressão com SVM
+
+x_treino_2d = x_treino.reshape(x_treino.shape[0], -1)
+x_teste_2d = x_teste.reshape(x_teste.shape[0], -1)
+
+# GridSearch para SVR
+svr_params = {
+    'C': [0.1, 1.0, 10.0],
+    'gamma': ['scale', 0.001, 0.01],
+    'kernel': ['rbf', 'linear']
+}
+
+svr_model = SVR()
+gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_squared_error', verbose=2)
+gs_svr.fit(x_treino_2d, y_treino.ravel())
+
+print("Melhores parâmetros SVR encontrados:", gs_svr.best_params_)
+print("Melhor MSE SVR:", gs_svr.best_score_)
+
+y_teste_previsto_svr = gs_svr.predict(x_teste_2d)
+
+# métricas do SVR
+rmse_svr = np.sqrt(mean_squared_error(y_teste, y_teste_previsto_svr))
+mape_svr = mean_absolute_percentage_error(y_teste, y_teste_previsto_svr)
+
+print("RESULTADOS FINAIS SVR (TESTE)")
+print(f"RMSE SVR: {rmse_svr:.4f}")
+print(f"MAPE SVR: {mape_svr:.4f}")
+
+# ========================================================= #
 
 plt.figure(figsize=(14, 5))
 
-plt.plot(y_teste, label='Retorno real', color='lightblue', alpha=0.8)
-plt.plot(y_teste_previsto, label='Previsão LSTM', color='red', linewidth=1.5)
+plt.plot(y_teste, label='Retorno Real', color='lightblue', alpha=0.7)
+plt.plot(y_teste_previsto, label='Previsão LSTM', color='red', linewidth=1.5, alpha=0.9)
+plt.plot(y_teste_previsto_svr, label='Previsão SVR', color='green', linewidth=1.5, linestyle='--', alpha=0.9)
 
-plt.title('Ibovespa: Retorno real vs previsão')
-plt.xlabel('Dias')
+plt.title('Comparação: Retorno real vs LSTM vs SVR')
+plt.xlabel('Dias (Teste)')
 plt.ylabel('Retorno diário')
 plt.legend()
 plt.grid(True, alpha=0.3)

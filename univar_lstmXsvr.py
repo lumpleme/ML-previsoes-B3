@@ -39,6 +39,19 @@ class ModeloLSTM(nn.Module):
         return out
     
 
+SEED = 10
+
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+
+if torch.cuda.is_available():
+    print("Usando GPU: ", torch.cuda.get_device_name(0))
+    torch.cuda.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+    torch.backends.cudnn.deterministic = True
+
+# ========================================================= #
 
 # carregando os dados
 df = pd.read_csv('dados/Historico_retornos.csv')
@@ -73,33 +86,14 @@ def criar_sequencias(dados, janela):
         X.append(sequencia_x)
         y.append(alvo_y)
     
-    return np.array(X), np.array(y)
+    return np.array(X, dtype = np.float32), np.array(y, dtype = np.float32)
 
 JANELA_DIAS = 21
 
 x_treino, y_treino = criar_sequencias(treino_normalizado, JANELA_DIAS)
 x_teste, y_teste = criar_sequencias(teste_normalizado, JANELA_DIAS)
 
-x_treino = x_treino.astype(np.float32)
-y_treino = y_treino.astype(np.float32)
-x_teste = x_teste.astype(np.float32)
-y_teste = y_teste.astype(np.float32)
-
 print("Formato do x_treino:", x_treino.shape)
-
-# ========================================================= #
-
-SEED = 10
-
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-
-if torch.cuda.is_available():
-    print("Usando GPU: ", torch.cuda.get_device_name(0))
-    torch.cuda.manual_seed(SEED)
-    torch.cuda.manual_seed_all(SEED)
-    torch.backends.cudnn.deterministic = True
 
 # ========================================================= #
 
@@ -114,18 +108,13 @@ net = NeuralNetRegressor(
 )
 
 grid_params = {
-    #'module__hidden_size': [20, 50],
-    #'module__num_layers': [1, 2],
-    #'optimizer__lr': [0.001, 0.01],
-    #'max_epochs': [10, 20, 50]    
-    'module__hidden_size': [50],
-    'module__num_layers': [1],
-    'optimizer__lr': [0.001],
-    'max_epochs': [50]
+    'module__hidden_size': [20, 50],
+    'module__num_layers': [1, 2],
+    'optimizer__lr': [0.001, 0.01],
+    'max_epochs': [10, 20, 50]
 }
 
-# tscv = TimeSeriesSplit(n_splits=3)
-tscv = TimeSeriesSplit(n_splits=2)
+tscv = TimeSeriesSplit(n_splits=3)
 
 gs = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_squared_error', verbose=2)
 gs.fit(x_treino, y_treino)
@@ -133,17 +122,36 @@ gs.fit(x_treino, y_treino)
 print("Melhores parâmetros encontrados:", gs.best_params_)
 print("Melhor MSE:", gs.best_score_)
 
+y_teste_previsto_lstm = gs.predict(x_teste)
+
 # ========================================================= #
 
-y_teste_previsto = gs.predict(x_teste)
+# pegando todos os resultados para comparação
+resultados_grid = pd.DataFrame(gs.cv_results_)
 
-# métricas do LSTM
-rmse = np.sqrt(mean_squared_error(y_teste, y_teste_previsto))
-mape = mean_absolute_percentage_error(y_teste, y_teste_previsto)
+cols = [
+    'param_max_epochs', 
+    'param_module__hidden_size', 
+    'param_module__num_layers', 
+    'param_optimizer__lr', 
+    'mean_test_score'
+]
+tabela_comp = resultados_grid[cols].copy()
 
-print("RESULTADOS FINAIS LSTM (TESTE)")
-print(f"RMSE : {rmse:.4f}")
-print(f"MAPE : {mape:.4f}")
+# MSE sempre positivo
+tabela_comp['MSE'] = np.abs(tabela_comp['mean_test_score'])
+tabela_comp = tabela_comp.drop(columns=['mean_test_score'])
+
+# ordenar do melhor para o pior
+tabela_comp = tabela_comp.sort_values(by='MSE').reset_index(drop=True)
+
+tabela_comp.columns = ['Épocas', 'Neurônios', 'Camadas', 'Taxa de aprendizado (LR)', 'MSE']
+
+print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS")
+print(tabela_comp.to_string())
+
+# guardando em um arquivo
+tabela_comp.to_csv('tabela_comp_lstm_univar.csv', index=False)
 
 # ========================================================= #
 # Teste de regressão com SVM
@@ -167,6 +175,48 @@ print("Melhor MSE SVR:", gs_svr.best_score_)
 
 y_teste_previsto_svr = gs_svr.predict(x_teste_2d)
 
+# ========================================================= #
+
+# pegando todos os resultados para comparação
+resultados_grid_svr = pd.DataFrame(gs_svr.cv_results_)
+
+cols_svr = [
+    'param_C', 
+    'param_kernel', 
+    'param_gamma', 
+    'mean_test_score'
+]
+tabela_comp_svr = resultados_grid_svr[cols_svr].copy()
+
+# MSE sempre positivo
+tabela_comp_svr['MSE'] = np.abs(tabela_comp_svr['mean_test_score'])
+tabela_comp_svr = tabela_comp_svr.drop(columns=['mean_test_score'])
+
+# ordenar do melhor para o pior
+tabela_comp_svr = tabela_comp_svr.sort_values(by='MSE').reset_index(drop=True)
+tabela_comp_svr.columns = ['C (Regularização)', 'Kernel', 'Gamma', 'MSE']
+
+print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS SVR")
+print(tabela_comp_svr.to_string())
+
+# guardando em um arquivo
+tabela_comp_svr.to_csv('tabela_comp_svr_univar.csv', index=False)
+
+# ========================================================= #
+
+# desnormalizando as previsões para comparação visual
+y_teste_previsto_lstm = scaler.inverse_transform(y_teste_previsto_lstm.reshape(-1, 1)).flatten()
+y_teste_previsto_svr = scaler.inverse_transform(y_teste_previsto_svr.reshape(-1, 1)).flatten()
+y_teste = scaler.inverse_transform(y_teste.reshape(-1, 1)).flatten()
+
+# métricas do LSTM
+rmse = np.sqrt(mean_squared_error(y_teste, y_teste_previsto_lstm))
+mape = mean_absolute_percentage_error(y_teste, y_teste_previsto_lstm)
+
+print("RESULTADOS FINAIS LSTM (TESTE)")
+print(f"RMSE : {rmse:.4f}")
+print(f"MAPE : {mape:.4f}")
+
 # métricas do SVR
 rmse_svr = np.sqrt(mean_squared_error(y_teste, y_teste_previsto_svr))
 mape_svr = mean_absolute_percentage_error(y_teste, y_teste_previsto_svr)
@@ -175,16 +225,14 @@ print("RESULTADOS FINAIS SVR (TESTE)")
 print(f"RMSE SVR: {rmse_svr:.4f}")
 print(f"MAPE SVR: {mape_svr:.4f}")
 
-# ========================================================= #
-
 plt.figure(figsize=(14, 5))
 
-plt.plot(y_teste, label='Retorno Real', color='lightblue', alpha=0.7)
-plt.plot(y_teste_previsto, label='Previsão LSTM', color='red', linewidth=1.5, alpha=0.9)
+plt.plot(y_teste, label='Retorno real', color='lightblue', alpha=0.7)
+plt.plot(y_teste_previsto_lstm, label='Previsão LSTM', color='red', linewidth=1.5, alpha=0.9)
 plt.plot(y_teste_previsto_svr, label='Previsão SVR', color='green', linewidth=1.5, linestyle='--', alpha=0.9)
 
-plt.title('Comparação: Retorno real vs LSTM vs SVR')
-plt.xlabel('Dias (Teste)')
+plt.title('Comparação Univar: Retorno real vs LSTM vs SVR')
+plt.xlabel('Dias (teste)')
 plt.ylabel('Retorno diário')
 plt.legend()
 plt.grid(True, alpha=0.3)

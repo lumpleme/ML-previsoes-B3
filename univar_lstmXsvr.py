@@ -78,9 +78,9 @@ teste_normalizado = scaler.transform(teste_bruto)
 def criar_sequencias(dados, janela):
     X, y = [], []
     for i in range(len(dados) - janela):
-        # Pega o bloco de dias (ex: 21 dias)
+        # pega o bloco de dias
         sequencia_x = dados[i : i + janela]
-        # Pega o dia seguinte para ser o alvo da previsão
+        # pega o dia seguinte como alvo
         alvo_y = dados[i + janela]
         
         X.append(sequencia_x)

@@ -53,11 +53,11 @@ if torch.cuda.is_available():
 
 # ========================================================= #
 
-BASE = 'dados/petr_multivar.csv'
+BASE = 'dados/petr4_multivar.csv'
 
 # carregando os dados
 df = pd.read_csv(BASE)
-df['data'] = pd.to_datetime(df['data'])
+df['date'] = pd.to_datetime(df['date'])
 
 # removendo NaN
 df = df.dropna().reset_index(drop=True)

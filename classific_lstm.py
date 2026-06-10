@@ -110,6 +110,7 @@ net = NeuralNetClassifier(
     device='cuda' if torch.cuda.is_available() else 'cpu'
 )
 
+# definindo os hiperparâmetros para o gridsearch
 grid_params = {
     'module__hidden_size': [20, 50],
     'module__num_layers': [2, 3],

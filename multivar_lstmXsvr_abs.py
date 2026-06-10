@@ -163,7 +163,7 @@ print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS")
 print(tabela_comp.to_string())
 
 # guardando em um arquivo
-tabela_comp.to_csv('tabela_comp_lstm_multivar_pesos.csv', index=False)
+tabela_comp.to_csv('tabela_comp_lstm_multivar_abs.csv', index=False)
 
 # ========================================================= #
 
@@ -183,7 +183,7 @@ svr_params = {
 svr_model = SVR()
 
 # realizando o GridSearch para o SVR
-gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_absolute_error', verbose=1)
+gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_absolute_error', verbose=2)
 gs_svr.fit(x_treino_2d, y_treino.ravel())
 
 print("Melhores hiperparâmetros SVR encontrados:", gs_svr.best_params_)
@@ -217,7 +217,7 @@ print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS SVR")
 print(tabela_comp_svr.to_string())
 
 # guardando em um arquivo
-tabela_comp_svr.to_csv('tabela_comp_svr_multivar_pesos.csv', index=False)
+tabela_comp_svr.to_csv('tabela_comp_svr_multivar_abs.csv', index=False)
 
 # ========================================================= #
 

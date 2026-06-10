@@ -87,8 +87,8 @@ df.to_csv(novo_nome, index=False)
 
 
 # montando os conjuntos para treinamento
-dados_x = df[['open', 'high', 'low', 'closed', 'vol', 'SMA_9', 'SMA_21', 'RSI']]
-dados_y = df['return']
+dados_x = df[['open', 'high', 'low', 'return', 'vol', 'SMA_9', 'SMA_21', 'RSI']]
+dados_y = df['closed']
 
 # separando 80% para treino e 20% para teste
 tamanho_treino = int(len(dados_y) * 0.8)
@@ -184,7 +184,7 @@ print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS")
 print(tabela_comp.to_string())
 
 # guardando em um arquivo
-tabela_comp.to_csv('tabela_comp_lstm_multivar8.csv', index=False)
+tabela_comp.to_csv('tabela_comp_lstm_multivar8closed.csv', index=False)
 
 # ========================================================= #
 
@@ -204,7 +204,7 @@ svr_params = {
 svr_model = SVR()
 
 # realizando o GridSearch para o SVR
-gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_absolute_error', verbose=1)
+gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_absolute_error', verbose=2)
 gs_svr.fit(x_treino_2d, y_treino.ravel())
 
 print("Melhores hiperparâmetros SVR encontrados:", gs_svr.best_params_)
@@ -238,7 +238,7 @@ print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS SVR")
 print(tabela_comp_svr.to_string())
 
 # guardando em um arquivo
-tabela_comp_svr.to_csv('tabela_comp_svr_multivar8.csv', index=False)
+tabela_comp_svr.to_csv('tabela_comp_svr_multivar8closed.csv', index=False)
 
 # ========================================================= #
 
@@ -266,13 +266,13 @@ print(f"MAPE SVR: {mape_svr:.4f}")
 # montando o gráfico comparativo
 plt.figure(figsize=(14, 5))
 
-plt.plot(y_teste, label='Retorno real', color='lightblue', alpha=0.7)
+plt.plot(y_teste, label='Preço real', color='lightblue', alpha=0.7)
 plt.plot(y_teste_previsto_lstm, label='Previsão LSTM', color='red', linewidth=1.5, alpha=0.9)
 plt.plot(y_teste_previsto_svr, label='Previsão SVR', color='green', linewidth=1.5, linestyle='--', alpha=0.9)
 
-plt.title('Comparação Multivar: Retorno real vs LSTM vs SVR')
+plt.title('Comparação Multivar: Preço real vs LSTM vs SVR')
 plt.xlabel('Dias (teste)')
-plt.ylabel('Retorno diário')
+plt.ylabel('Preço de fechamento')
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
@@ -284,8 +284,12 @@ plt.show()
 
 erros_absolutos = np.abs(y_teste - y_teste_previsto_lstm)
 
+# calculando variação para ter o direcional
+variacao_real = np.diff(y_teste, prepend=y_teste[0])
+variacao_prevista = np.diff(y_teste_previsto_lstm, prepend=y_teste_previsto_lstm[0])
+
 # verificando quais acertou a direção
-acertou_direcao = np.sign(y_teste) == np.sign(y_teste_previsto_lstm)
+acertou_direcao = np.sign(variacao_real) == np.sign(variacao_prevista)
 
 cores_barras = ['green' if acertou else 'red' for acertou in acertou_direcao[:45]]
 
@@ -295,7 +299,7 @@ plt.bar(range(45), erros_absolutos[:45], color=cores_barras, alpha=0.8, edgecolo
 
 plt.title('LSTM: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
 plt.xlabel('Dias (teste)')
-plt.ylabel('Erro Absoluto')
+plt.ylabel('Erro Absoluto (R$)')
 
 # legenda
 patch_verde = mpatches.Patch(color='green', label='Acertou a direção')
@@ -323,8 +327,11 @@ print(f"Taxa de Acerto Direcional LSTM das primeiras 10 previsões: {taxa_acerto
 
 erros_absolutos_svr = np.abs(y_teste - y_teste_previsto_svr)
 
+# calculando a variação para o SVR
+variacao_prevista_svr = np.diff(y_teste_previsto_svr, prepend=y_teste_previsto_svr[0])
+
 # verificando quais acertou a direção
-acertou_direcao_svr = np.sign(y_teste) == np.sign(y_teste_previsto_svr)
+acertou_direcao_svr = np.sign(variacao_real) == np.sign(variacao_prevista_svr)
 
 cores_barras_svr = ['green' if acertou else 'red' for acertou in acertou_direcao_svr[:45]]
 
@@ -334,7 +341,7 @@ plt.bar(range(45), erros_absolutos_svr[:45], color=cores_barras_svr, alpha=0.8, 
 
 plt.title('SVR: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
 plt.xlabel('Dias (teste)')
-plt.ylabel('Erro Absoluto')
+plt.ylabel('Erro Absoluto (R$)')
 
 # legenda
 patch_verde = mpatches.Patch(color='green', label='Acertou a direção')

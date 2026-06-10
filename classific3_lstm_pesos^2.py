@@ -104,6 +104,9 @@ pesos_classes = compute_class_weight(
     classes=np.unique(treino_y_bruto),
     y=treino_y_bruto
 )
+# elevando ao quadrado para reforçar os pesos
+# abordagem mais agressiva para tentar forçar o modelo a arriscar extremos
+pesos_classes**=2
 
 # convertendo para um tensor do PyTorch
 pesos_tensor = torch.tensor(pesos_classes, dtype=torch.float32)

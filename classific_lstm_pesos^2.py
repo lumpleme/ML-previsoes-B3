@@ -16,7 +16,7 @@ JANELA_DIAS = 21
 BASE = 'dados/petr4_multivar.csv'
 
 class ModeloLSTMClassific(nn.Module):
-    def __init__(self, input_size=5, hidden_size=50, num_layers=2, output_size=3):
+    def __init__(self, input_size=5, hidden_size=50, num_layers=2, output_size=5):
         super(ModeloLSTMClassific, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -48,26 +48,29 @@ df = df.dropna().reset_index(drop=True)
 
 # calculando a flutuação normal com desvio padrão
 desvio_padrao = df['return'].std()
-print(f"\nDesvio Padrão Histórico do Ativo: {desvio_padrao:.4f}")
+print(f"\nDesvio Padrão histórico do ativo: {desvio_padrao:.4f}")
 
 # definindo os limites
 limite_neutro = 0.5 * desvio_padrao
+limite_extremo = 1.5 * desvio_padrao
 
-# criar 3 categorias com base nos limites
+# criar 5 categorias com base nos limites
 def categorizar_retorno(retorno):
-    if retorno < -limite_neutro:
-        return 0  # Desce
+    if retorno < -limite_extremo:
+        return 0  # Desce muito
+    elif -limite_extremo <= retorno < -limite_neutro:
+        return 1  # Desce
     elif -limite_neutro <= retorno <= limite_neutro:
-        return 1  # Neutro
+        return 2  # Neutro
+    elif limite_neutro < retorno <= limite_extremo:
+        return 3  # Sobe
     else:
-        return 2  # Sobe
+        return 4  # Sobe muito
 
 df['classe_alvo'] = df['return'].apply(categorizar_retorno)
 
 print("\nDistribuição das classes na base de dados:")
 print(df['classe_alvo'].value_counts().sort_index())
-
-# ========================================================= #
 
 # montando os conjuntos para treinamento
 dados_x = df[['open', 'high', 'low', 'closed', 'vol']].values
@@ -82,8 +85,7 @@ scaler_x = MinMaxScaler(feature_range=(0, 1))
 treino_x_norm = scaler_x.fit_transform(treino_x_bruto)
 teste_x_norm = scaler_x.transform(teste_x_bruto)
 
-# criando as sequências com a janela definida
-def criar_sequencias_classificacao(dados_x, dados_y, janela):
+def criar_sequencias_classific(dados_x, dados_y, janela):
     X, y = [], []
     for i in range(len(dados_x) - janela):
         X.append(dados_x[i : i + janela])
@@ -91,12 +93,11 @@ def criar_sequencias_classificacao(dados_x, dados_y, janela):
     
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.int64)
 
-x_treino, y_treino = criar_sequencias_classificacao(treino_x_norm, treino_y_bruto, JANELA_DIAS)
-x_teste, y_teste = criar_sequencias_classificacao(teste_x_norm, teste_y_bruto, JANELA_DIAS)
+# criando as sequências com a janela definida
+x_treino, y_treino = criar_sequencias_classific(treino_x_norm, treino_y_bruto, JANELA_DIAS)
+x_teste, y_teste = criar_sequencias_classific(teste_x_norm, teste_y_bruto, JANELA_DIAS)
 
 # ========================================================= #
-
-# calculando pesos para balancear as classes
 
 # calculando um peso para cada classe para equilibrar o treinamento
 pesos_classes = compute_class_weight(
@@ -104,6 +105,9 @@ pesos_classes = compute_class_weight(
     classes=np.unique(treino_y_bruto),
     y=treino_y_bruto
 )
+# elevando ao quadrado para reforçar os pesos
+# abordagem mais agressiva para tentar forçar o modelo a arriscar extremos
+pesos_classes **= 2 
 
 # convertendo para um tensor do PyTorch
 pesos_tensor = torch.tensor(pesos_classes, dtype=torch.float32)
@@ -117,8 +121,6 @@ print(f"Pesos calculados: {pesos_classes}")
 # ========================================================= #
 
 # configurando o modelo LSTM classificador
-print("\nIniciando GridSearch do LSTM Classificador...")
-
 net = NeuralNetClassifier(
     module=ModeloLSTMClassific,
     criterion=nn.CrossEntropyLoss,
@@ -144,7 +146,7 @@ gs_lstm = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='accuracy'
 gs_lstm.fit(x_treino, y_treino)
 
 print("\nMelhores hiperparâmetros encontrados:", gs_lstm.best_params_)
-print("Melhor Acurácia no Treino:", gs_lstm.best_score_)
+print("Melhor Acurácia no treino:", gs_lstm.best_score_)
 
 # ========================================================= #
 
@@ -152,8 +154,7 @@ print("Melhor Acurácia no Treino:", gs_lstm.best_score_)
 y_teste_previsto = gs_lstm.predict(x_teste)
 
 print("RELATÓRIO DE CLASSIFICAÇÃO LSTM (TESTE):")
-print(classification_report(y_teste, y_teste_previsto, 
-                            target_names=['0: Desce', '1: Neutro', '2: Sobe']))
+print(classification_report(y_teste, y_teste_previsto, target_names=['0: Desce muito', '1: Desce', '2: Neutro', '3: Sobe', '4: Sobe muito']))
 
 # ========================================================= #
 
@@ -161,14 +162,13 @@ print(classification_report(y_teste, y_teste_previsto,
 matriz_confusao = confusion_matrix(y_teste, y_teste_previsto)
 
 # rótulos para o gráfico
-nomes_classes = ['Desce', 'Neutro', 'Sobe']
+nomes_classes = ['Desce muito', 'Desce', 'Neutro', 'Sobe', 'Sobe muito']
 
 # desenha o heatmap
 plt.figure(figsize=(8, 6))
-sns.heatmap(matriz_confusao, annot=True, fmt='d', cmap='Blues', 
-            xticklabels=nomes_classes, yticklabels=nomes_classes)
+sns.heatmap(matriz_confusao, annot=True, fmt='d', cmap='Blues', xticklabels=nomes_classes, yticklabels=nomes_classes)
 
-plt.title('Matriz de confusão (3 classes): Previsão LSTM vs Realidade')
+plt.title('Matriz de confusão (5 classes): Previsão LSTM vs Realidade')
 plt.xlabel('Previsão do modelo')
 plt.ylabel('Realidade')
 plt.tight_layout()

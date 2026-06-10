@@ -105,9 +105,6 @@ pesos_classes = compute_class_weight(
     classes=np.unique(treino_y_bruto),
     y=treino_y_bruto
 )
-# elevando ao quadrado para reforçar os pesos
-# abordagem mais agressiva para tentar forçar o modelo a arriscar extremos
-pesos_classes **= 2 
 
 # convertendo para um tensor do PyTorch
 pesos_tensor = torch.tensor(pesos_classes, dtype=torch.float32)
@@ -131,6 +128,7 @@ net = NeuralNetClassifier(
     device='cuda' if torch.cuda.is_available() else 'cpu'
 )
 
+# definindo os hiperparâmetros para o gridsearch
 grid_params = {
     'module__hidden_size': [20, 50],
     'module__num_layers': [2, 3],

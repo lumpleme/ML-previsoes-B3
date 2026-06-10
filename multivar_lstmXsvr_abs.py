@@ -13,7 +13,7 @@ from sklearn.svm import SVR
 import matplotlib.patches as mpatches
 
 JANELA_DIAS = 21
-BASE = 'dados/petr4_multivar.csv'
+BASE = 'dados/ibov_multivar.csv'
 
 class ModeloLSTM(nn.Module):
     def __init__(self, input_size=5, hidden_size=50, num_layers=2, output_size=1):

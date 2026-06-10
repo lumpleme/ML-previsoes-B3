@@ -115,9 +115,9 @@ net = NeuralNetRegressor(
 # definindo os hiperparâmetros para o GridSearch
 grid_params = {
     'module__hidden_size': [20, 50],
-    'module__num_layers': [1, 2],
+    'module__num_layers': [1, 2, 3],
     'optimizer__lr': [0.001, 0.01],
-    'max_epochs': [10, 20, 50]
+    'max_epochs': [20, 50, 100]
 }
 
 tscv = TimeSeriesSplit(n_splits=3)

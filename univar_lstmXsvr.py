@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
 import random
 from sklearn.svm import SVR
+import matplotlib.patches as mpatches
 
 
 class ModeloLSTM(nn.Module):
@@ -60,11 +61,12 @@ df['data'] = pd.to_datetime(df['data'])
 # removendo a linha com NaN no retorno
 df = df.dropna(subset=['retorno'])
 
+# filtrando os dados a partir de 2010
 df_2010 = df[df['data'] >= '2010-01-01'].copy()
 
 dados_retorno = df_2010[['retorno']].values
 
-# 80% para treino, 20% para teste
+# separando 80% para treino e 20% para teste
 tamanho_treino = int(len(dados_retorno) * 0.8)
 treino_bruto = dados_retorno[:tamanho_treino]
 teste_bruto = dados_retorno[tamanho_treino:]
@@ -94,8 +96,11 @@ x_treino, y_treino = criar_sequencias(treino_normalizado, JANELA_DIAS)
 x_teste, y_teste = criar_sequencias(teste_normalizado, JANELA_DIAS)
 
 print("Formato do x_treino:", x_treino.shape)
+print("Formato do y_treino:", y_treino.shape)
 
 # ========================================================= #
+
+# teste de regressão com LSTM
 
 net = NeuralNetRegressor(
     module = ModeloLSTM,
@@ -107,6 +112,7 @@ net = NeuralNetRegressor(
     device='cuda' if torch.cuda.is_available() else 'cpu'
 )
 
+# definindo os hiperparâmetros para o GridSearch
 grid_params = {
     'module__hidden_size': [20, 50],
     'module__num_layers': [1, 2],
@@ -116,12 +122,14 @@ grid_params = {
 
 tscv = TimeSeriesSplit(n_splits=3)
 
+# realizando o GridSearch para o LSTM
 gs = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_squared_error', verbose=2)
 gs.fit(x_treino, y_treino)
 
-print("Melhores parâmetros encontrados:", gs.best_params_)
+print("Melhores hiperparâmetros encontrados:", gs.best_params_)
 print("Melhor MSE:", gs.best_score_)
 
+# calculando as previsões no conjunto de teste
 y_teste_previsto_lstm = gs.predict(x_teste)
 
 # ========================================================= #
@@ -154,12 +162,14 @@ print(tabela_comp.to_string())
 tabela_comp.to_csv('tabela_comp_lstm_univar.csv', index=False)
 
 # ========================================================= #
-# Teste de regressão com SVM
 
+# teste de regressão com SVM
+
+# transformando os dados em 2D para o SVR 
 x_treino_2d = x_treino.reshape(x_treino.shape[0], -1)
 x_teste_2d = x_teste.reshape(x_teste.shape[0], -1)
 
-# GridSearch para SVR
+# definindo os hiperparâmetros para o GridSearch 
 svr_params = {
     'C': [0.1, 1.0, 10.0],
     'gamma': ['scale', 0.001, 0.01],
@@ -167,12 +177,15 @@ svr_params = {
 }
 
 svr_model = SVR()
+
+# realizando o GridSearch para o SVR
 gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_squared_error', verbose=2)
 gs_svr.fit(x_treino_2d, y_treino.ravel())
 
-print("Melhores parâmetros SVR encontrados:", gs_svr.best_params_)
+print("Melhores hiperparâmetros SVR encontrados:", gs_svr.best_params_)
 print("Melhor MSE SVR:", gs_svr.best_score_)
 
+# calculando as previsões no conjunto de teste
 y_teste_previsto_svr = gs_svr.predict(x_teste_2d)
 
 # ========================================================= #
@@ -225,6 +238,7 @@ print("RESULTADOS FINAIS SVR (TESTE)")
 print(f"RMSE SVR: {rmse_svr:.4f}")
 print(f"MAPE SVR: {mape_svr:.4f}")
 
+# montando o gráfico comparativo
 plt.figure(figsize=(14, 5))
 
 plt.plot(y_teste, label='Retorno real', color='lightblue', alpha=0.7)
@@ -238,3 +252,81 @@ plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.show()
+
+# ========================================================= #
+
+# calculando o Erro Absoluto Diário e o Acerto Direcional para o LSTM
+
+erros_absolutos = np.abs(y_teste - y_teste_previsto_lstm)
+
+# verificando quais acertou a direção
+acertou_direcao = np.sign(y_teste) == np.sign(y_teste_previsto_lstm)
+
+cores_barras = ['green' if acertou else 'red' for acertou in acertou_direcao[:45]]
+
+# montando o gráfico (apenas 45 dias)
+plt.figure(figsize=(12, 5))
+plt.bar(range(45), erros_absolutos[:45], color=cores_barras, alpha=0.8, edgecolor='black', linewidth=0.5)
+
+plt.title('LSTM: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
+plt.xlabel('Dias (teste)')
+plt.ylabel('Erro Absoluto')
+
+# legenda
+patch_verde = mpatches.Patch(color='green', label='Acertou a direção')
+patch_vermelho = mpatches.Patch(color='red', label='Errou a direção')
+plt.legend(handles=[patch_verde, patch_vermelho], loc='upper left')
+
+# linha horizontal no zero 
+plt.axhline(0, color='black', linewidth=1)
+plt.grid(True, axis='y', alpha=0.3, linestyle='--')
+plt.xticks(range(0, 45, 5))
+plt.tight_layout()
+plt.show()
+
+# calculando a taxa de acerto direcional total
+taxa_acerto = (sum(acertou_direcao) / len(acertou_direcao)) * 100
+print(f"\nTaxa de Acerto Direcional LSTM de todo o período de teste: {taxa_acerto:.2f}%")
+
+# percentual de acerto direcional das primeiras 10 previsões
+taxa_acerto_10 = (sum(acertou_direcao[:10]) / 10) * 100
+print(f"Taxa de Acerto Direcional LSTM das primeiras 10 previsões: {taxa_acerto_10:.2f}%")
+
+# ========================================================= #
+
+# calculando o Erro Absoluto Diário e o Acerto Direcional para o SVR
+
+erros_absolutos_svr = np.abs(y_teste - y_teste_previsto_svr)
+
+# verificando quais acertou a direção
+acertou_direcao_svr = np.sign(y_teste) == np.sign(y_teste_previsto_svr)
+
+cores_barras_svr = ['green' if acertou else 'red' for acertou in acertou_direcao_svr[:45]]
+
+# montando o gráfico (apenas 45 dias)
+plt.figure(figsize=(12, 5))
+plt.bar(range(45), erros_absolutos_svr[:45], color=cores_barras_svr, alpha=0.8, edgecolor='black', linewidth=0.5)
+
+plt.title('SVR: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
+plt.xlabel('Dias (teste)')
+plt.ylabel('Erro Absoluto')
+
+# legenda
+patch_verde = mpatches.Patch(color='green', label='Acertou a direção')
+patch_vermelho = mpatches.Patch(color='red', label='Errou a direção')
+plt.legend(handles=[patch_verde, patch_vermelho], loc='upper left')
+
+# linha horizontal no zero 
+plt.axhline(0, color='black', linewidth=1)
+plt.grid(True, axis='y', alpha=0.3, linestyle='--')
+plt.xticks(range(0, 45, 5))
+plt.tight_layout()
+plt.show()
+
+# calculando a taxa de acerto direcional total
+taxa_acerto_svr = (sum(acertou_direcao_svr) / len(acertou_direcao_svr)) * 100
+print(f"\nTaxa de Acerto Direcional SVR de todo o período de teste: {taxa_acerto_svr:.2f}%")
+
+# percentual de acerto direcional das primeiras 10 previsões
+taxa_acerto_10_svr = (sum(acertou_direcao_svr[:10]) / 10) * 100
+print(f"Taxa de Acerto Direcional SVR das primeiras 10 previsões: {taxa_acerto_10_svr:.2f}%")

@@ -16,14 +16,14 @@ JANELA_DIAS = 21
 BASE = 'dados/petr4_multivar.csv'
 
 class ModeloLSTM(nn.Module):
-    def __init__(self, input_size=5, hidden_size=50, num_layers=1, output_size=1):
+    def __init__(self, input_size=8, hidden_size=50, num_layers=2, output_size=1):
         super(ModeloLSTM, self).__init__()
         
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         
         # camada LSTM
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=0.2)
         
         # camada linear (saída)
         # para pegar o que o LSTM processou e transformar em um único valor (a previsão do dia seguinte)
@@ -60,12 +60,35 @@ if torch.cuda.is_available():
 df = pd.read_csv(BASE)
 df['date'] = pd.to_datetime(df['date'])
 
+# calculando indicadores técnicos
+
+# calculando a Média Móvel Simples (SMA) de 9 e 21 dias
+df['SMA_9'] = df['closed'].rolling(window=9).mean()
+df['SMA_21'] = df['closed'].rolling(window=21).mean()
+
+# calculando o RSI (Índice de Força Relativa) de 14 dias
+delta = df['closed'].diff()
+ganho = delta.where(delta > 0, 0)
+perda = -delta.where(delta < 0, 0)
+
+# usando a Média Móvel Exponencial (EWM) como a fórmula original de Welles Wilder
+media_ganho = ganho.ewm(com=13, min_periods=14).mean()
+media_perda = perda.ewm(com=13, min_periods=14).mean()
+
+rs = media_ganho / media_perda
+df['RSI'] = 100 - (100 / (1 + rs))
+
 # removendo NaN
 df = df.dropna().reset_index(drop=True)
 
+# salvando em um arquivo novo
+novo_nome = BASE.replace('.csv', '_indicadores.csv')
+df.to_csv(novo_nome, index=False)
+
+
 # montando os conjuntos para treinamento
-dados_x = df[['open', 'high', 'low', 'closed', 'vol']]
-dados_y = df['return']
+dados_x = df[['open', 'high', 'low', 'return', 'vol', 'SMA_9', 'SMA_21', 'RSI']]
+dados_y = df['closed']
 
 # separando 80% para treino e 20% para teste
 tamanho_treino = int(len(dados_y) * 0.8)
@@ -105,11 +128,9 @@ print("Formato do y_treino:", y_treino.shape)
 
 # ========================================================= #
 
-# teste de regressão com o LSTM
-
 net = NeuralNetRegressor(
     module = ModeloLSTM,
-    criterion = nn.MSELoss,
+    criterion = nn.L1Loss,
     optimizer = optim.Adam,
     batch_size = 16,
     verbose = 0,
@@ -121,17 +142,17 @@ grid_params = {
     'module__hidden_size': [20, 50],
     'module__num_layers': [2, 3],
     'optimizer__lr': [0.001],
-    'max_epochs': [20, 50, 100]
+    'max_epochs': [20, 50]
 }
 
 tscv = TimeSeriesSplit(n_splits=3)
 
 # realizando o GridSearch para o LSTM
-gs_lstm = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_squared_error', verbose=2)
+gs_lstm = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_absolute_error', verbose=2)
 gs_lstm.fit(x_treino, y_treino)
 
 print("Melhores hiperparâmetros LSTM encontrados:", gs_lstm.best_params_)
-print("Melhor MSE:", gs_lstm.best_score_)
+print("Melhor MAE:", gs_lstm.best_score_)
 
 # calculando as previsões no conjunto de teste
 y_teste_previsto_lstm = gs_lstm.predict(x_teste)
@@ -150,20 +171,20 @@ cols = [
 ]
 tabela_comp = resultados_grid[cols].copy()
 
-# MSE sempre positivo
-tabela_comp['MSE'] = np.abs(tabela_comp['mean_test_score'])
+# MAE sempre positivo
+tabela_comp['MAE'] = np.abs(tabela_comp['mean_test_score'])
 tabela_comp = tabela_comp.drop(columns=['mean_test_score'])
 
 # ordenar do melhor para o pior
-tabela_comp = tabela_comp.sort_values(by='MSE').reset_index(drop=True)
+tabela_comp = tabela_comp.sort_values(by='MAE').reset_index(drop=True)
 
-tabela_comp.columns = ['Épocas', 'Neurônios', 'Camadas', 'Taxa de aprendizado (LR)', 'MSE']
+tabela_comp.columns = ['Épocas', 'Neurônios', 'Camadas', 'Taxa de aprendizado (LR)', 'MAE']
 
-print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS LSTM:")
+print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS")
 print(tabela_comp.to_string())
 
 # guardando em um arquivo
-tabela_comp.to_csv('tabela_comp_lstm_multivar.csv', index=False)
+tabela_comp.to_csv('tabela_comp_lstm_multivar8closed.csv', index=False)
 
 # ========================================================= #
 
@@ -183,11 +204,11 @@ svr_params = {
 svr_model = SVR()
 
 # realizando o GridSearch para o SVR
-gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_squared_error', verbose=1)
+gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_absolute_error', verbose=1)
 gs_svr.fit(x_treino_2d, y_treino.ravel())
 
 print("Melhores hiperparâmetros SVR encontrados:", gs_svr.best_params_)
-print("Melhor MSE SVR:", gs_svr.best_score_)
+print("Melhor MAE SVR:", gs_svr.best_score_)
 
 # calculando as previsões no conjunto de teste
 y_teste_previsto_svr = gs_svr.predict(x_teste_2d)
@@ -205,19 +226,19 @@ cols_svr = [
 ]
 tabela_comp_svr = resultados_grid_svr[cols_svr].copy()
 
-# MSE sempre positivo
-tabela_comp_svr['MSE'] = np.abs(tabela_comp_svr['mean_test_score'])
+# MAE sempre positivo
+tabela_comp_svr['MAE'] = np.abs(tabela_comp_svr['mean_test_score'])
 tabela_comp_svr = tabela_comp_svr.drop(columns=['mean_test_score'])
 
 # ordenar do melhor para o pior
-tabela_comp_svr = tabela_comp_svr.sort_values(by='MSE').reset_index(drop=True)
-tabela_comp_svr.columns = ['C (Regularização)', 'Kernel', 'Gamma', 'MSE']
+tabela_comp_svr = tabela_comp_svr.sort_values(by='MAE').reset_index(drop=True)
+tabela_comp_svr.columns = ['C (Regularização)', 'Kernel', 'Gamma', 'MAE']
 
 print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS SVR")
 print(tabela_comp_svr.to_string())
 
 # guardando em um arquivo
-tabela_comp_svr.to_csv('tabela_comp_svr_multivar.csv', index=False)
+tabela_comp_svr.to_csv('tabela_comp_svr_multivar8closed.csv', index=False)
 
 # ========================================================= #
 
@@ -245,13 +266,13 @@ print(f"MAPE SVR: {mape_svr:.4f}")
 # montando o gráfico comparativo
 plt.figure(figsize=(14, 5))
 
-plt.plot(y_teste, label='Retorno real', color='lightblue', alpha=0.7)
+plt.plot(y_teste, label='Preço real', color='lightblue', alpha=0.7)
 plt.plot(y_teste_previsto_lstm, label='Previsão LSTM', color='red', linewidth=1.5, alpha=0.9)
 plt.plot(y_teste_previsto_svr, label='Previsão SVR', color='green', linewidth=1.5, linestyle='--', alpha=0.9)
 
-plt.title('Comparação Multivar: Retorno real vs LSTM vs SVR')
+plt.title('Comparação Multivar: Preço real vs LSTM vs SVR')
 plt.xlabel('Dias (teste)')
-plt.ylabel('Retorno diário')
+plt.ylabel('Preço de fechamento')
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
@@ -263,8 +284,12 @@ plt.show()
 
 erros_absolutos = np.abs(y_teste - y_teste_previsto_lstm)
 
+# calculando variação para ter o direcional
+variacao_real = np.diff(y_teste, prepend=y_teste[0])
+variacao_prevista = np.diff(y_teste_previsto_lstm, prepend=y_teste_previsto_lstm[0])
+
 # verificando quais acertou a direção
-acertou_direcao = np.sign(y_teste) == np.sign(y_teste_previsto_lstm)
+acertou_direcao = np.sign(variacao_real) == np.sign(variacao_prevista)
 
 cores_barras = ['green' if acertou else 'red' for acertou in acertou_direcao[:45]]
 
@@ -274,7 +299,7 @@ plt.bar(range(45), erros_absolutos[:45], color=cores_barras, alpha=0.8, edgecolo
 
 plt.title('LSTM: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
 plt.xlabel('Dias (teste)')
-plt.ylabel('Erro Absoluto')
+plt.ylabel('Erro Absoluto (R$)')
 
 # legenda
 patch_verde = mpatches.Patch(color='green', label='Acertou a direção')
@@ -302,8 +327,11 @@ print(f"Taxa de Acerto Direcional LSTM das primeiras 10 previsões: {taxa_acerto
 
 erros_absolutos_svr = np.abs(y_teste - y_teste_previsto_svr)
 
+# calculando a variação para o SVR
+variacao_prevista_svr = np.diff(y_teste_previsto_svr, prepend=y_teste_previsto_svr[0])
+
 # verificando quais acertou a direção
-acertou_direcao_svr = np.sign(y_teste) == np.sign(y_teste_previsto_svr)
+acertou_direcao_svr = np.sign(variacao_real) == np.sign(variacao_prevista_svr)
 
 cores_barras_svr = ['green' if acertou else 'red' for acertou in acertou_direcao_svr[:45]]
 
@@ -313,7 +341,7 @@ plt.bar(range(45), erros_absolutos_svr[:45], color=cores_barras_svr, alpha=0.8, 
 
 plt.title('SVR: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
 plt.xlabel('Dias (teste)')
-plt.ylabel('Erro Absoluto')
+plt.ylabel('Erro Absoluto (R$)')
 
 # legenda
 patch_verde = mpatches.Patch(color='green', label='Acertou a direção')

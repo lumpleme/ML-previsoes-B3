@@ -16,14 +16,14 @@ JANELA_DIAS = 21
 BASE = 'dados/petr4_multivar.csv'
 
 class ModeloLSTM(nn.Module):
-    def __init__(self, input_size=5, hidden_size=50, num_layers=1, output_size=1):
+    def __init__(self, input_size=5, hidden_size=50, num_layers=2, output_size=1):
         super(ModeloLSTM, self).__init__()
         
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         
         # camada LSTM
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=0.2)
         
         # camada linear (saída)
         # para pegar o que o LSTM processou e transformar em um único valor (a previsão do dia seguinte)
@@ -109,7 +109,7 @@ print("Formato do y_treino:", y_treino.shape)
 
 net = NeuralNetRegressor(
     module = ModeloLSTM,
-    criterion = nn.MSELoss,
+    criterion = nn.L1Loss,
     optimizer = optim.Adam,
     batch_size = 16,
     verbose = 0,
@@ -127,11 +127,11 @@ grid_params = {
 tscv = TimeSeriesSplit(n_splits=3)
 
 # realizando o GridSearch para o LSTM
-gs_lstm = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_squared_error', verbose=2)
+gs_lstm = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_absolute_error', verbose=2)
 gs_lstm.fit(x_treino, y_treino)
 
 print("Melhores hiperparâmetros LSTM encontrados:", gs_lstm.best_params_)
-print("Melhor MSE:", gs_lstm.best_score_)
+print("Melhor MAE:", gs_lstm.best_score_)
 
 # calculando as previsões no conjunto de teste
 y_teste_previsto_lstm = gs_lstm.predict(x_teste)
@@ -150,32 +150,32 @@ cols = [
 ]
 tabela_comp = resultados_grid[cols].copy()
 
-# MSE sempre positivo
-tabela_comp['MSE'] = np.abs(tabela_comp['mean_test_score'])
+# MAE sempre positivo
+tabela_comp['MAE'] = np.abs(tabela_comp['mean_test_score'])
 tabela_comp = tabela_comp.drop(columns=['mean_test_score'])
 
 # ordenar do melhor para o pior
-tabela_comp = tabela_comp.sort_values(by='MSE').reset_index(drop=True)
+tabela_comp = tabela_comp.sort_values(by='MAE').reset_index(drop=True)
 
-tabela_comp.columns = ['Épocas', 'Neurônios', 'Camadas', 'Taxa de aprendizado (LR)', 'MSE']
+tabela_comp.columns = ['Épocas', 'Neurônios', 'Camadas', 'Taxa de aprendizado (LR)', 'MAE']
 
-print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS LSTM:")
+print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS")
 print(tabela_comp.to_string())
 
 # guardando em um arquivo
-tabela_comp.to_csv('tabela_comp_lstm_multivar.csv', index=False)
+tabela_comp.to_csv('tabela_comp_lstm_multivar_pesos.csv', index=False)
 
 # ========================================================= #
 
 # teste de regressão com SVM
 
-# transformando os dados em 2D para o SVR
+# transformando os dados em 2D para o SVR 
 x_treino_2d = x_treino.reshape(x_treino.shape[0], -1)
 x_teste_2d = x_teste.reshape(x_teste.shape[0], -1)
 
 # definindo os hiperparâmetros para o GridSearch
 svr_params = {
-    'C': [0.1, 1.0, 10.0, 100.0, 1000.0],
+    'C': [1.0, 10.0, 100.0, 1000.0],
     'gamma': ['scale', 0.001, 0.01],
     'kernel': ['rbf', 'linear']
 }
@@ -183,11 +183,11 @@ svr_params = {
 svr_model = SVR()
 
 # realizando o GridSearch para o SVR
-gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_squared_error', verbose=1)
+gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_absolute_error', verbose=1)
 gs_svr.fit(x_treino_2d, y_treino.ravel())
 
 print("Melhores hiperparâmetros SVR encontrados:", gs_svr.best_params_)
-print("Melhor MSE SVR:", gs_svr.best_score_)
+print("Melhor MAE SVR:", gs_svr.best_score_)
 
 # calculando as previsões no conjunto de teste
 y_teste_previsto_svr = gs_svr.predict(x_teste_2d)
@@ -205,19 +205,19 @@ cols_svr = [
 ]
 tabela_comp_svr = resultados_grid_svr[cols_svr].copy()
 
-# MSE sempre positivo
-tabela_comp_svr['MSE'] = np.abs(tabela_comp_svr['mean_test_score'])
+# MAE sempre positivo
+tabela_comp_svr['MAE'] = np.abs(tabela_comp_svr['mean_test_score'])
 tabela_comp_svr = tabela_comp_svr.drop(columns=['mean_test_score'])
 
 # ordenar do melhor para o pior
-tabela_comp_svr = tabela_comp_svr.sort_values(by='MSE').reset_index(drop=True)
-tabela_comp_svr.columns = ['C (Regularização)', 'Kernel', 'Gamma', 'MSE']
+tabela_comp_svr = tabela_comp_svr.sort_values(by='MAE').reset_index(drop=True)
+tabela_comp_svr.columns = ['C (Regularização)', 'Kernel', 'Gamma', 'MAE']
 
 print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS SVR")
 print(tabela_comp_svr.to_string())
 
 # guardando em um arquivo
-tabela_comp_svr.to_csv('tabela_comp_svr_multivar.csv', index=False)
+tabela_comp_svr.to_csv('tabela_comp_svr_multivar_pesos.csv', index=False)
 
 # ========================================================= #
 
@@ -242,7 +242,7 @@ print("RESULTADOS FINAIS SVR (TESTE)")
 print(f"RMSE SVR: {rmse_svr:.4f}")
 print(f"MAPE SVR: {mape_svr:.4f}")
 
-# montando o gráfico comparativo
+# montando gráfico comparativo
 plt.figure(figsize=(14, 5))
 
 plt.plot(y_teste, label='Retorno real', color='lightblue', alpha=0.7)

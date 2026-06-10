@@ -16,14 +16,14 @@ JANELA_DIAS = 21
 BASE = 'dados/petr4_multivar.csv'
 
 class ModeloLSTM(nn.Module):
-    def __init__(self, input_size=5, hidden_size=50, num_layers=1, output_size=1):
+    def __init__(self, input_size=8, hidden_size=50, num_layers=2, output_size=1):
         super(ModeloLSTM, self).__init__()
         
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         
         # camada LSTM
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=0.2)
         
         # camada linear (saída)
         # para pegar o que o LSTM processou e transformar em um único valor (a previsão do dia seguinte)
@@ -60,11 +60,34 @@ if torch.cuda.is_available():
 df = pd.read_csv(BASE)
 df['date'] = pd.to_datetime(df['date'])
 
+# calculando indicadores técnicos
+
+# calculando a Média Móvel Simples (SMA) de 9 e 21 dias
+df['SMA_9'] = df['closed'].rolling(window=9).mean()
+df['SMA_21'] = df['closed'].rolling(window=21).mean()
+
+# calculando o RSI (Índice de Força Relativa) de 14 dias
+delta = df['closed'].diff()
+ganho = delta.where(delta > 0, 0)
+perda = -delta.where(delta < 0, 0)
+
+# usando a Média Móvel Exponencial (EWM) como a fórmula original de Welles Wilder
+media_ganho = ganho.ewm(com=13, min_periods=14).mean()
+media_perda = perda.ewm(com=13, min_periods=14).mean()
+
+rs = media_ganho / media_perda
+df['RSI'] = 100 - (100 / (1 + rs))
+
 # removendo NaN
 df = df.dropna().reset_index(drop=True)
 
+# salvando em um arquivo novo
+novo_nome = BASE.replace('.csv', '_indicadores.csv')
+df.to_csv(novo_nome, index=False)
+
+
 # montando os conjuntos para treinamento
-dados_x = df[['open', 'high', 'low', 'closed', 'vol']]
+dados_x = df[['open', 'high', 'low', 'closed', 'vol', 'SMA_9', 'SMA_21', 'RSI']]
 dados_y = df['return']
 
 # separando 80% para treino e 20% para teste
@@ -105,11 +128,9 @@ print("Formato do y_treino:", y_treino.shape)
 
 # ========================================================= #
 
-# teste de regressão com o LSTM
-
 net = NeuralNetRegressor(
     module = ModeloLSTM,
-    criterion = nn.MSELoss,
+    criterion = nn.L1Loss,
     optimizer = optim.Adam,
     batch_size = 16,
     verbose = 0,
@@ -127,11 +148,11 @@ grid_params = {
 tscv = TimeSeriesSplit(n_splits=3)
 
 # realizando o GridSearch para o LSTM
-gs_lstm = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_squared_error', verbose=2)
+gs_lstm = GridSearchCV(net, grid_params, refit=True, cv=tscv, scoring='neg_mean_absolute_error', verbose=2)
 gs_lstm.fit(x_treino, y_treino)
 
 print("Melhores hiperparâmetros LSTM encontrados:", gs_lstm.best_params_)
-print("Melhor MSE:", gs_lstm.best_score_)
+print("Melhor MAE:", gs_lstm.best_score_)
 
 # calculando as previsões no conjunto de teste
 y_teste_previsto_lstm = gs_lstm.predict(x_teste)
@@ -150,20 +171,20 @@ cols = [
 ]
 tabela_comp = resultados_grid[cols].copy()
 
-# MSE sempre positivo
-tabela_comp['MSE'] = np.abs(tabela_comp['mean_test_score'])
+# MAE sempre positivo
+tabela_comp['MAE'] = np.abs(tabela_comp['mean_test_score'])
 tabela_comp = tabela_comp.drop(columns=['mean_test_score'])
 
 # ordenar do melhor para o pior
-tabela_comp = tabela_comp.sort_values(by='MSE').reset_index(drop=True)
+tabela_comp = tabela_comp.sort_values(by='MAE').reset_index(drop=True)
 
-tabela_comp.columns = ['Épocas', 'Neurônios', 'Camadas', 'Taxa de aprendizado (LR)', 'MSE']
+tabela_comp.columns = ['Épocas', 'Neurônios', 'Camadas', 'Taxa de aprendizado (LR)', 'MAE']
 
-print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS LSTM:")
+print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS")
 print(tabela_comp.to_string())
 
 # guardando em um arquivo
-tabela_comp.to_csv('tabela_comp_lstm_multivar.csv', index=False)
+tabela_comp.to_csv('tabela_comp_lstm_multivar8.csv', index=False)
 
 # ========================================================= #
 
@@ -183,11 +204,11 @@ svr_params = {
 svr_model = SVR()
 
 # realizando o GridSearch para o SVR
-gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_squared_error', verbose=1)
+gs_svr = GridSearchCV(svr_model, svr_params, cv=tscv, scoring='neg_mean_absolute_error', verbose=1)
 gs_svr.fit(x_treino_2d, y_treino.ravel())
 
 print("Melhores hiperparâmetros SVR encontrados:", gs_svr.best_params_)
-print("Melhor MSE SVR:", gs_svr.best_score_)
+print("Melhor MAE SVR:", gs_svr.best_score_)
 
 # calculando as previsões no conjunto de teste
 y_teste_previsto_svr = gs_svr.predict(x_teste_2d)
@@ -205,19 +226,19 @@ cols_svr = [
 ]
 tabela_comp_svr = resultados_grid_svr[cols_svr].copy()
 
-# MSE sempre positivo
-tabela_comp_svr['MSE'] = np.abs(tabela_comp_svr['mean_test_score'])
+# MAE sempre positivo
+tabela_comp_svr['MAE'] = np.abs(tabela_comp_svr['mean_test_score'])
 tabela_comp_svr = tabela_comp_svr.drop(columns=['mean_test_score'])
 
 # ordenar do melhor para o pior
-tabela_comp_svr = tabela_comp_svr.sort_values(by='MSE').reset_index(drop=True)
-tabela_comp_svr.columns = ['C (Regularização)', 'Kernel', 'Gamma', 'MSE']
+tabela_comp_svr = tabela_comp_svr.sort_values(by='MAE').reset_index(drop=True)
+tabela_comp_svr.columns = ['C (Regularização)', 'Kernel', 'Gamma', 'MAE']
 
 print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS SVR")
 print(tabela_comp_svr.to_string())
 
 # guardando em um arquivo
-tabela_comp_svr.to_csv('tabela_comp_svr_multivar.csv', index=False)
+tabela_comp_svr.to_csv('tabela_comp_svr_multivar8.csv', index=False)
 
 # ========================================================= #
 

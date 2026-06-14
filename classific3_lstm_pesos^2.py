@@ -33,12 +33,6 @@ random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 
-if torch.cuda.is_available():
-    print("Usando GPU: ", torch.cuda.get_device_name(0))
-    torch.cuda.manual_seed(SEED)
-    torch.cuda.manual_seed_all(SEED)
-    torch.backends.cudnn.deterministic = True
-
 # ========================================================= #
 
 # carregando base de dados
@@ -111,9 +105,6 @@ pesos_classes**=2
 # convertendo para um tensor do PyTorch
 pesos_tensor = torch.tensor(pesos_classes, dtype=torch.float32)
 
-# se estiver usando GPU, transfere os pesos também
-if torch.cuda.is_available():
-    pesos_tensor = pesos_tensor.to('cuda')
 
 print(f"Pesos calculados: {pesos_classes}")
 
@@ -129,7 +120,7 @@ net = NeuralNetClassifier(
     optimizer=optim.Adam,
     batch_size=16,
     verbose=0,
-    device='cuda' if torch.cuda.is_available() else 'cpu'
+    device='cpu'
 )
 
 # definindo os hiperparâmetros para o gridsearch

@@ -13,10 +13,10 @@ from sklearn.svm import SVR
 import matplotlib.patches as mpatches
 
 JANELA_DIAS = 21
-BASE = 'dados/ibov_multivar.csv'
+BASE = 'dados/petr4_multivar_indicadores.csv'
 
 class ModeloLSTM(nn.Module):
-    def __init__(self, input_size=5, hidden_size=50, num_layers=2, output_size=1):
+    def __init__(self, input_size=13, hidden_size=50, num_layers=2, output_size=1):
         super(ModeloLSTM, self).__init__()
         
         self.hidden_size = hidden_size
@@ -54,11 +54,28 @@ torch.manual_seed(SEED)
 df = pd.read_csv(BASE)
 df['date'] = pd.to_datetime(df['date'])
 
+# carregando os dados do dólar para juntar na análise
+df_dolar = pd.read_csv('dados/dolar_multivar.csv')
+df_dolar['date'] = pd.to_datetime(df_dolar['date'])
+
+# renomeando colunas para evitar conflito
+df_dolar = df_dolar.rename(columns={
+    'open':   'dolar_open',
+    'high':   'dolar_high',
+    'low':    'dolar_low',
+    'closed': 'dolar_closed',
+    'return': 'dolar_return',
+})
+
+# juntando os dados
+df = df.merge(df_dolar, on='date', how='inner')
+
 # removendo NaN
 df = df.dropna().reset_index(drop=True)
 
 # montando os conjuntos para treinamento
-dados_x = df[['open', 'high', 'low', 'closed', 'vol']]
+dados_x = df[['open', 'high', 'low', 'closed', 'vol', 'SMA_9', 'SMA_21', 'RSI',
+               'dolar_open', 'dolar_high', 'dolar_low', 'dolar_closed', 'dolar_return']]
 dados_y = df['return']
 
 # separando 80% para treino e 20% para teste
@@ -98,8 +115,6 @@ print("Formato do x_treino:", x_treino.shape)
 print("Formato do y_treino:", y_treino.shape)
 
 # ========================================================= #
-
-# teste de regressão com o LSTM
 
 net = NeuralNetRegressor(
     module = ModeloLSTM,
@@ -157,19 +172,19 @@ print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS")
 print(tabela_comp.to_string())
 
 # guardando em um arquivo
-tabela_comp.to_csv('tabela_comp_lstm_multivar_abs.csv', index=False)
+tabela_comp.to_csv('tabela_comp_lstm_multivar8_dolar.csv', index=False)
 
 # ========================================================= #
 
 # teste de regressão com SVM
 
-# transformando os dados em 2D para o SVR 
+# transformando os dados em 2D para o SVR
 x_treino_2d = x_treino.reshape(x_treino.shape[0], -1)
 x_teste_2d = x_teste.reshape(x_teste.shape[0], -1)
 
 # definindo os hiperparâmetros para o GridSearch
 svr_params = {
-    'C': [1.0, 10.0, 100.0, 1000.0],
+    'C': [0.1, 1.0, 10.0, 100.0, 1000.0],
     'gamma': ['scale', 0.001, 0.01],
     'kernel': ['rbf', 'linear']
 }
@@ -211,7 +226,7 @@ print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS SVR")
 print(tabela_comp_svr.to_string())
 
 # guardando em um arquivo
-tabela_comp_svr.to_csv('tabela_comp_svr_multivar_abs.csv', index=False)
+tabela_comp_svr.to_csv('tabela_comp_svr_multivar8_dolar.csv', index=False)
 
 # ========================================================= #
 
@@ -236,14 +251,14 @@ print("RESULTADOS FINAIS SVR (TESTE)")
 print(f"RMSE SVR: {rmse_svr:.4f}")
 print(f"MAPE SVR: {mape_svr:.4f}")
 
-# montando gráfico comparativo
+# montando o gráfico comparativo
 plt.figure(figsize=(14, 5))
 
 plt.plot(y_teste, label='Retorno real', color='lightblue', alpha=0.7)
 plt.plot(y_teste_previsto_lstm, label='Previsão LSTM', color='red', linewidth=1.5, alpha=0.9)
 plt.plot(y_teste_previsto_svr, label='Previsão SVR', color='green', linewidth=1.5, linestyle='--', alpha=0.9)
 
-plt.title('Comparação Multivar: Retorno real vs LSTM vs SVR')
+plt.title('Comparação Multivar + Dólar: Retorno real vs LSTM vs SVR')
 plt.xlabel('Dias (teste)')
 plt.ylabel('Retorno diário')
 plt.legend()
@@ -266,7 +281,7 @@ cores_barras = ['green' if acertou else 'red' for acertou in acertou_direcao[:45
 plt.figure(figsize=(12, 5))
 plt.bar(range(45), erros_absolutos[:45], color=cores_barras, alpha=0.8, edgecolor='black', linewidth=0.5)
 
-plt.title('LSTM: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
+plt.title('LSTM + Dólar: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
 plt.xlabel('Dias (teste)')
 plt.ylabel('Erro Absoluto')
 
@@ -305,7 +320,7 @@ cores_barras_svr = ['green' if acertou else 'red' for acertou in acertou_direcao
 plt.figure(figsize=(12, 5))
 plt.bar(range(45), erros_absolutos_svr[:45], color=cores_barras_svr, alpha=0.8, edgecolor='black', linewidth=0.5)
 
-plt.title('SVR: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
+plt.title('SVR + Dólar: Erro Absoluto e Acerto Direcional (teste) - 45 dias')
 plt.xlabel('Dias (teste)')
 plt.ylabel('Erro Absoluto')
 

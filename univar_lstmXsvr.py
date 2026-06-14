@@ -46,12 +46,6 @@ random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 
-if torch.cuda.is_available():
-    print("Usando GPU: ", torch.cuda.get_device_name(0))
-    torch.cuda.manual_seed(SEED)
-    torch.cuda.manual_seed_all(SEED)
-    torch.backends.cudnn.deterministic = True
-
 # ========================================================= #
 
 # carregando os dados
@@ -109,7 +103,7 @@ net = NeuralNetRegressor(
     max_epochs = 50,
     batch_size = 16,
     verbose = 0,
-    device='cuda' if torch.cuda.is_available() else 'cpu'
+    device='cpu'
 )
 
 # definindo os hiperparâmetros para o GridSearch

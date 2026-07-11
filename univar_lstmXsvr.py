@@ -100,7 +100,6 @@ net = NeuralNetRegressor(
     module = ModeloLSTM,
     criterion = nn.MSELoss,
     optimizer = optim.Adam,
-    max_epochs = 50,
     batch_size = 16,
     verbose = 0,
     device='cpu'
@@ -109,7 +108,7 @@ net = NeuralNetRegressor(
 # definindo os hiperparâmetros para o GridSearch
 grid_params = {
     'module__hidden_size': [20, 50],
-    'module__num_layers': [1, 2, 3],
+    'module__num_layers': [2, 3],
     'optimizer__lr': [0.001, 0.01],
     'max_epochs': [20, 50, 100]
 }
@@ -165,7 +164,7 @@ x_teste_2d = x_teste.reshape(x_teste.shape[0], -1)
 
 # definindo os hiperparâmetros para o GridSearch 
 svr_params = {
-    'C': [0.1, 1.0, 10.0],
+    'C': [0.1, 1.0, 10.0, 100.0, 1000.0],
     'gamma': ['scale', 0.001, 0.01],
     'kernel': ['rbf', 'linear']
 }

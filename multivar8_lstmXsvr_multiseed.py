@@ -18,7 +18,7 @@ import matplotlib.patches as mpatches
 
 SEEDS = [10, 429, 128963, 7, 9998]
 JANELA_DIAS = 21
-BASE = 'dados/petr4_multivar_indicadores.csv'
+BASE = 'dados/ibov_multivar_indicadores.csv'
 
 # ========================================================= #
 
@@ -185,7 +185,7 @@ for seed in SEEDS:
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f'grafico_comparativo_seed{seed}.png', dpi=110)
+    plt.savefig(f'multivar8_seed{seed}.png', dpi=110)
     plt.close()
 
     # --- gráfico erro absoluto + acerto direcional LSTM ---
@@ -205,7 +205,7 @@ for seed in SEEDS:
     plt.grid(True, axis='y', alpha=0.3, linestyle='--')
     plt.xticks(range(0, 45, 5))
     plt.tight_layout()
-    plt.savefig(f'grafico_erros_lstm_seed{seed}.png', dpi=110)
+    plt.savefig(f'er_lstm_seed{seed}.png', dpi=110)
     plt.close()
 
     # --- gráfico erro absoluto + acerto direcional SVR ---
@@ -223,7 +223,7 @@ for seed in SEEDS:
     plt.grid(True, axis='y', alpha=0.3, linestyle='--')
     plt.xticks(range(0, 45, 5))
     plt.tight_layout()
-    plt.savefig(f'grafico_erros_svr_seed{seed}.png', dpi=110)
+    plt.savefig(f'er_svr_seed{seed}.png', dpi=110)
     plt.close()
 
     # --- acumulando para a tabela consolidada ---
@@ -259,5 +259,4 @@ df_consolid = pd.DataFrame(consolidado)
 print("\nTABELA CONSOLIDADA DE TODAS AS SEEDS")
 print(df_consolid.to_string(index=False))
 
-df_consolid.to_csv('tabela_consolidada_multiseed.csv', index=False)
-print("\nSalvo em: tabela_consolidada_multiseed.csv")
+df_consolid.to_csv('tabela_multiseed.csv', index=False)

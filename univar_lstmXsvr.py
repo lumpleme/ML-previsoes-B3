@@ -49,7 +49,7 @@ torch.manual_seed(SEED)
 # ========================================================= #
 
 # carregando os dados
-df = pd.read_csv('dados/Historico_retornos.csv')
+df = pd.read_csv('dados/Historico_retornos_ffill.csv')
 df['data'] = pd.to_datetime(df['data'])
 
 # removendo a linha com NaN no retorno
@@ -109,7 +109,7 @@ net = NeuralNetRegressor(
 grid_params = {
     'module__hidden_size': [20, 50],
     'module__num_layers': [2, 3],
-    'optimizer__lr': [0.001, 0.01],
+    'optimizer__lr': [0.001],
     'max_epochs': [20, 50, 100]
 }
 
@@ -152,7 +152,7 @@ print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS")
 print(tabela_comp.to_string())
 
 # guardando em um arquivo
-tabela_comp.to_csv('tabela_comp_lstm_univar.csv', index=False)
+tabela_comp.to_csv('tabela_comp_lstm_univar_ffill.csv', index=False)
 
 # ========================================================= #
 
@@ -206,7 +206,7 @@ print("\nTABELA COMPARATIVA DE HIPERPARÂMETROS SVR")
 print(tabela_comp_svr.to_string())
 
 # guardando em um arquivo
-tabela_comp_svr.to_csv('tabela_comp_svr_univar.csv', index=False)
+tabela_comp_svr.to_csv('tabela_comp_svr_univar_ffill.csv', index=False)
 
 # ========================================================= #
 
